@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     gcp_region: str = "us-central1"
 
     cors_origins: str = "http://localhost:3000"
+    # Regex matching all Vercel deployments (production, branch previews, PR previews).
+    # Defaults to the public ReliefOps Vercel project; override per-env if you fork.
+    cors_origin_regex: str = r"https://relief-o-ps-web(-[a-z0-9-]+)?\.vercel\.app"
 
     # Firebase emulator hosts — when set, Admin SDK clients route to the local emulator.
     firestore_emulator_host: str | None = None
