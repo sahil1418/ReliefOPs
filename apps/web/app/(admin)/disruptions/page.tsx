@@ -2,19 +2,16 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  ShieldAlert,
   Activity,
-  Brain,
   Route,
   AlertTriangle,
   TrendingUp,
   Zap,
-  Eye,
   RefreshCw,
+  ChevronRight,
+  Database,
 } from "lucide-react";
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -90,7 +87,12 @@ type ModelStatus = {
   };
   graph_router: {
     algorithm: string;
-    graph_stats: { nodes: number; edges: number; blocked_edges: number; disrupted_edges: number };
+    graph_stats: {
+      nodes: number;
+      edges: number;
+      blocked_edges: number;
+      disrupted_edges: number;
+    };
     demo_nodes: string[];
   };
   disruption_predictor: {
@@ -99,7 +101,25 @@ type ModelStatus = {
   };
 };
 
-/* ── Main Page ──────────────────────────────────────────────────────────── */
+/* ── Constants ──────────────────────────────────────────────────────────── */
+
+const RISK_CONFIG: Record<string, { color: string; bg: string; border: string }> = {
+  critical: { color: "#dc2626", bg: "rgba(220,38,38,0.06)", border: "rgba(220,38,38,0.18)" },
+  high:     { color: "#ea580c", bg: "rgba(234,88,12,0.06)", border: "rgba(234,88,12,0.18)" },
+  medium:   { color: "#ca8a04", bg: "rgba(202,138,4,0.06)", border: "rgba(202,138,4,0.18)" },
+  low:      { color: "#16a34a", bg: "rgba(22,163,74,0.06)", border: "rgba(22,163,74,0.18)" },
+};
+
+const ANOMALY_COLORS: Record<string, string> = {
+  stuck: "#dc2626",
+  drift: "#ea580c",
+  slowdown: "#ca8a04",
+  congestion: "#7c3aed",
+  spoofing: "#db2777",
+  unknown: "#6b7280",
+};
+
+/* ── Page ───────────────────────────────────────────────────────────────── */
 
 export default function DisruptionsPage() {
   const [anomalies, setAnomalies] = useState<AnomalyEvent[]>([]);
@@ -123,7 +143,9 @@ export default function DisruptionsPage() {
       setModelStatus(m);
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiCallError ? err.message : "Failed to load ML data");
+      setError(
+        err instanceof ApiCallError ? err.message : "Failed to load ML data"
+      );
     } finally {
       setLoading(false);
     }
@@ -138,10 +160,14 @@ export default function DisruptionsPage() {
   const runPrediction = async () => {
     setPredicting(true);
     try {
-      const result = await api.post<DisruptionPrediction>("/api/ml/predict-disruptions");
+      const result = await api.post<DisruptionPrediction>(
+        "/api/ml/predict-disruptions"
+      );
       setPrediction(result);
     } catch (err) {
-      setError(err instanceof ApiCallError ? err.message : "Prediction failed");
+      setError(
+        err instanceof ApiCallError ? err.message : "Prediction failed"
+      );
     } finally {
       setPredicting(false);
     }
@@ -154,267 +180,299 @@ export default function DisruptionsPage() {
       const result = await api.post<{
         anomalies_created: number;
         tracking_events_created: number;
-        corridors_populated: string[];
       }>("/api/ml/seed-demo");
       setSeedResult(
-        `Seeded ${result.anomalies_created} anomalies + ${result.tracking_events_created} tracking events`
+        `${result.anomalies_created} anomalies + ${result.tracking_events_created} tracking events seeded`
       );
-      // Reload data after seeding.
       await loadData();
     } catch (err) {
-      setError(err instanceof ApiCallError ? err.message : "Seeding failed");
+      setError(
+        err instanceof ApiCallError ? err.message : "Seeding failed"
+      );
     } finally {
       setSeeding(false);
     }
   };
 
-  /* ── Derived data for charts ──────────────────────────────────────────── */
+  /* ── Derived ──────────────────────────────────────────────────────────── */
 
-  const anomalyTypeData = anomalies.reduce(
-    (acc, a) => {
-      const type = a.anomaly_type || "unknown";
-      acc[type] = (acc[type] || 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>,
-  );
-
-  const typeBarData = Object.entries(anomalyTypeData).map(([type, count]) => ({
+  const typeBarData = Object.entries(
+    anomalies.reduce(
+      (acc, a) => {
+        const t = a.anomaly_type || "unknown";
+        acc[t] = (acc[t] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    )
+  ).map(([type, count]) => ({
     type: type.charAt(0).toUpperCase() + type.slice(1),
     count,
   }));
 
-  const corridorRadarData =
+  const radarData =
     prediction?.corridors.map((c) => ({
-      corridor: c.corridor_name.split(" ")[0],
+      corridor: c.corridor_name.split(/[\s–-]/)[0],
       risk: Math.round(c.risk_score * 100),
-      delay: c.predicted_delay_min,
     })) ?? [];
 
-  const riskColors: Record<string, string> = {
-    critical: "#ef4444",
-    high: "#f97316",
-    medium: "#eab308",
-    low: "#22c55e",
-  };
+  const highestRisk = prediction?.corridors.reduce(
+    (max, c) => (c.risk_score > max.risk_score ? c : max),
+    prediction.corridors[0]
+  );
 
-  const anomalyTypeColors: Record<string, string> = {
-    stuck: "#ef4444",
-    drift: "#f97316",
-    slowdown: "#eab308",
-    congestion: "#8b5cf6",
-    spoofing: "#ec4899",
-    unknown: "#6b7280",
-  };
+  /* ── Render ──────────────────────────────────────────────────────────── */
 
   return (
     <>
       <AdminTopbar title="Supply Chain Intelligence" />
-      <main className="flex-1 space-y-6 p-6">
-        {/* ── Header Badge ────────────────────────────────────────── */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg">
-              <Brain className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">ML-Powered Disruption Detection</h2>
-              <p className="text-xs text-muted-foreground">
-                Isolation Forest anomaly detection · Gemini risk scoring · Dijkstra graph routing
-              </p>
-            </div>
+
+      <main className="flex-1 space-y-5 p-6">
+        {/* ── Page header ────────────────────────────────────────────── */}
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">
+              Disruption Detection
+            </h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              ML-powered transit anomaly detection and corridor risk assessment
+            </p>
           </div>
+
           <div className="flex items-center gap-2">
             <button
               onClick={seedDemoData}
               disabled={seeding}
-              className="flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
             >
               {seeding ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
+                <RefreshCw className="h-3 w-3 animate-spin" />
               ) : (
-                <Activity className="h-4 w-4" />
+                <Database className="h-3 w-3" />
               )}
-              {seeding ? "Seeding…" : "Seed Demo Data"}
+              Seed Data
             </button>
             <button
               onClick={runPrediction}
               disabled={predicting}
-              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3.5 py-1.5 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {predicting ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
+                <RefreshCw className="h-3 w-3 animate-spin" />
               ) : (
-                <Zap className="h-4 w-4" />
+                <Zap className="h-3 w-3" />
               )}
-              {predicting ? "Predicting…" : "Run Prediction"}
+              Predict
             </button>
           </div>
-        </div>
+        </header>
 
         {seedResult && (
-          <div className="rounded-md border border-emerald-500/50 bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400">
-            {seedResult}
-          </div>
+          <p className="text-xs text-emerald-600">{seedResult}</p>
         )}
 
         {error && (
-          <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
-            {error} — is FastAPI running on{" "}
-            <code>{process.env.NEXT_PUBLIC_API_BASE_URL || "localhost:8000"}</code>?
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            {error}
           </div>
         )}
 
-        {/* ── KPI Row ──────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard
-            icon={<ShieldAlert className="h-5 w-5 text-violet-500" />}
-            title="Anomalies Detected"
+        {/* ── KPI strip ──────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <MetricCard
+            label="Anomalies"
             value={anomalies.length}
-            sublabel="last 4 hours"
-            accent="violet"
+            sub="last 4 h"
+            trend={anomalies.length > 5 ? "up" : "stable"}
           />
-          <KpiCard
-            icon={<Route className="h-5 w-5 text-amber-500" />}
-            title="Corridors Monitored"
+          <MetricCard
+            label="Corridors"
             value={prediction?.corridors.length ?? 0}
-            sublabel="real-time risk scoring"
-            accent="amber"
+            sub="monitored"
           />
-          <KpiCard
-            icon={<AlertTriangle className="h-5 w-5 text-rose-500" />}
-            title="At-Risk Shipments"
+          <MetricCard
+            label="At Risk"
             value={prediction?.total_at_risk_shipments ?? 0}
-            sublabel="across all corridors"
-            accent="rose"
+            sub="shipments"
+            trend={
+              (prediction?.total_at_risk_shipments ?? 0) > 0 ? "up" : "stable"
+            }
           />
-          <KpiCard
-            icon={<Activity className="h-5 w-5 text-emerald-500" />}
-            title="Model Status"
-            value={modelStatus?.anomaly_detector.fitted ? "Active" : "Offline"}
-            sublabel={modelStatus?.anomaly_detector.algorithm ?? "—"}
-            accent="emerald"
+          <MetricCard
+            label="Model"
+            value={modelStatus?.anomaly_detector.fitted ? "Online" : "Offline"}
+            sub={modelStatus?.anomaly_detector.version ?? "—"}
+            valueColor={
+              modelStatus?.anomaly_detector.fitted
+                ? "text-emerald-600"
+                : "text-rose-500"
+            }
           />
         </div>
 
-        {/* ── Corridor Risk Cards ───────────────────────────────────── */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-violet-500" />
-              Corridor Risk Assessment
-            </CardTitle>
-            <CardDescription>
-              Predictive risk scores for transit corridors — updated every 15s.
-              Risk &gt; 0.7 triggers pre-emptive reroute recommendation.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!prediction ? (
-              <p className="text-sm text-muted-foreground">Loading corridors…</p>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {prediction.corridors.map((c) => (
+        {/* ── Corridor risk grid ─────────────────────────────────────── */}
+        <section>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="text-sm font-medium">Corridor Risk</h2>
+            <span className="text-[11px] text-muted-foreground">
+              auto-refresh 15 s
+            </span>
+          </div>
+
+          {!prediction ? (
+            <Skeleton />
+          ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {prediction.corridors.map((c) => {
+                const cfg = RISK_CONFIG[c.risk_level] ?? RISK_CONFIG.low;
+                return (
                   <div
                     key={c.corridor_id}
-                    className="relative overflow-hidden rounded-lg border bg-gradient-to-br from-background to-muted/30 p-4 transition-shadow hover:shadow-md"
+                    className="group relative rounded-xl border p-4 transition-all duration-200 hover:shadow-sm"
+                    style={{ borderColor: cfg.border, background: cfg.bg }}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold">{c.corridor_name}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {c.center_lat.toFixed(2)}°N, {c.center_lng.toFixed(2)}°E
+                    {/* header */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-semibold leading-snug">
+                          {c.corridor_name}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {c.center_lat.toFixed(2)}°N,{" "}
+                          {c.center_lng.toFixed(2)}°E
                         </p>
                       </div>
                       <span
-                        className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                        style={{
-                          backgroundColor: `${riskColors[c.risk_level]}20`,
-                          color: riskColors[c.risk_level],
-                        }}
+                        className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                        style={{ color: cfg.color, background: cfg.bg }}
                       >
-                        {c.risk_level.toUpperCase()}
+                        {c.risk_level}
                       </span>
                     </div>
 
-                    {/* Risk bar */}
-                    <div className="mt-3">
-                      <div className="flex items-baseline justify-between text-xs">
-                        <span className="text-muted-foreground">Risk Score</span>
-                        <span className="font-mono font-semibold">
-                          {(c.risk_score * 100).toFixed(1)}%
+                    {/* risk bar */}
+                    <div className="mt-3.5">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-[11px] text-muted-foreground">
+                          Risk
+                        </span>
+                        <span
+                          className="font-mono text-lg font-semibold tabular-nums leading-none"
+                          style={{ color: cfg.color }}
+                        >
+                          {(c.risk_score * 100).toFixed(1)}
+                          <span className="text-[11px] font-normal">%</span>
                         </span>
                       </div>
-                      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-border/60">
                         <div
-                          className="h-full rounded-full transition-all duration-500"
+                          className="h-full rounded-full transition-all duration-700 ease-out"
                           style={{
-                            width: `${c.risk_score * 100}%`,
-                            backgroundColor: riskColors[c.risk_level],
+                            width: `${Math.max(c.risk_score * 100, 2)}%`,
+                            backgroundColor: cfg.color,
                           }}
                         />
                       </div>
                     </div>
 
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    {/* metrics row */}
+                    <div className="mt-3 flex items-center gap-4 text-[11px]">
                       <div>
-                        <span className="text-muted-foreground">Predicted delay</span>
-                        <p className="font-semibold">{c.predicted_delay_min} min</p>
+                        <span className="text-muted-foreground">Delay</span>
+                        <p className="font-medium">{c.predicted_delay_min} min</p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Confidence</span>
-                        <p className="font-semibold">{(c.confidence * 100).toFixed(0)}%</p>
+                        <p className="font-medium">
+                          {(c.confidence * 100).toFixed(0)}%
+                        </p>
                       </div>
+                      {c.affected_shipment_ids.length > 0 && (
+                        <div>
+                          <span className="text-muted-foreground">Affected</span>
+                          <p className="font-medium text-rose-600">
+                            {c.affected_shipment_ids.length}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
+                    {/* factors */}
                     {c.factors.length > 0 && (
-                      <div className="mt-2">
+                      <div className="mt-2.5 space-y-0.5">
                         {c.factors.slice(0, 2).map((f, i) => (
-                          <p key={i} className="text-xs text-muted-foreground">
-                            • {f}
+                          <p
+                            key={i}
+                            className="text-[11px] leading-relaxed text-muted-foreground"
+                          >
+                            {f}
                           </p>
                         ))}
                       </div>
                     )}
-
-                    {c.affected_shipment_ids.length > 0 && (
-                      <p className="mt-2 text-xs font-medium text-rose-600">
-                        ⚠ {c.affected_shipment_ids.length} shipment(s) affected
-                      </p>
-                    )}
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
-        {/* ── Charts Row ────────────────────────────────────────────── */}
+        {/* ── Charts ─────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Anomaly Types Distribution */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Anomaly Type Distribution</CardTitle>
-              <CardDescription>Breakdown by detected anomaly category (last 4h)</CardDescription>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">
+                Anomaly Distribution
+              </CardTitle>
+              <CardDescription className="text-[11px]">
+                By category, last 4 hours
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {typeBarData.length === 0 ? (
-                <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-                  No anomalies detected — fleet operating normally ✓
+                <div className="flex h-44 items-center justify-center text-xs text-muted-foreground">
+                  No anomalies in window
                 </div>
               ) : (
-                <div className="h-48">
+                <div className="h-44">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={typeBarData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="type" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                      <Tooltip contentStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                        {typeBarData.map((entry) => (
+                    <BarChart
+                      data={typeBarData}
+                      margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="hsl(var(--border))"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="type"
+                        tick={{ fontSize: 10 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10 }}
+                        allowDecimals={false}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          fontSize: 11,
+                          borderRadius: 8,
+                          border: "1px solid hsl(var(--border))",
+                          boxShadow: "0 4px 12px rgba(0,0,0,.08)",
+                        }}
+                      />
+                      <Bar dataKey="count" radius={[6, 6, 0, 0]} barSize={28}>
+                        {typeBarData.map((e) => (
                           <Cell
-                            key={entry.type}
-                            fill={anomalyTypeColors[entry.type.toLowerCase()] ?? "#6b7280"}
+                            key={e.type}
+                            fill={
+                              ANOMALY_COLORS[e.type.toLowerCase()] ?? "#94a3b8"
+                            }
+                            fillOpacity={0.85}
                           />
                         ))}
                       </Bar>
@@ -425,30 +483,40 @@ export default function DisruptionsPage() {
             </CardContent>
           </Card>
 
-          {/* Corridor Risk Radar */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Corridor Risk Radar</CardTitle>
-              <CardDescription>Comparative risk levels across monitored corridors</CardDescription>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">
+                Corridor Risk Radar
+              </CardTitle>
+              <CardDescription className="text-[11px]">
+                Comparative risk levels
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {corridorRadarData.length === 0 ? (
-                <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-                  Loading corridor data…
+              {radarData.length === 0 ? (
+                <div className="flex h-44 items-center justify-center text-xs text-muted-foreground">
+                  Loading...
                 </div>
               ) : (
-                <div className="h-48">
+                <div className="h-44">
                   <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart data={corridorRadarData}>
-                      <PolarGrid stroke="#e2e8f0" />
-                      <PolarAngleAxis dataKey="corridor" tick={{ fontSize: 10 }} />
-                      <PolarRadiusAxis tick={{ fontSize: 9 }} domain={[0, 100]} />
+                    <RadarChart data={radarData} cx="50%" cy="50%">
+                      <PolarGrid stroke="hsl(var(--border))" />
+                      <PolarAngleAxis
+                        dataKey="corridor"
+                        tick={{ fontSize: 9 }}
+                      />
+                      <PolarRadiusAxis
+                        tick={{ fontSize: 8 }}
+                        domain={[0, 100]}
+                        axisLine={false}
+                      />
                       <Radar
-                        name="Risk %"
                         dataKey="risk"
-                        stroke="#8b5cf6"
-                        fill="#8b5cf6"
-                        fillOpacity={0.3}
+                        stroke="#7c3aed"
+                        fill="#7c3aed"
+                        fillOpacity={0.15}
+                        strokeWidth={1.5}
                       />
                     </RadarChart>
                   </ResponsiveContainer>
@@ -458,69 +526,83 @@ export default function DisruptionsPage() {
           </Card>
         </div>
 
-        {/* ── Anomaly Feed ───────────────────────────────────────────── */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Eye className="h-5 w-5 text-amber-500" />
-              Live Anomaly Feed
-            </CardTitle>
-            <CardDescription>
-              Real-time anomalies detected by the Isolation Forest model on GPS tracking data.
-              Each row represents a transit event that deviated from normal patterns.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {anomalies.length === 0 ? (
-              <div className="flex h-32 items-center justify-center rounded-md border-2 border-dashed bg-muted/40 text-sm text-muted-foreground">
-                {loading ? "Loading anomaly events…" : "No anomalies detected — all clear ✓"}
-              </div>
-            ) : (
-              <div className="max-h-96 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 border-b bg-background">
-                    <tr className="text-xs text-muted-foreground">
-                      <th className="py-2 text-left">Type</th>
-                      <th className="py-2 text-left">Score</th>
-                      <th className="py-2 text-left">Confidence</th>
-                      <th className="py-2 text-left">Location</th>
-                      <th className="py-2 text-left">Volunteer</th>
-                      <th className="py-2 text-left">Action</th>
-                      <th className="py-2 text-left">Time</th>
+        {/* ── Anomaly table ──────────────────────────────────────────── */}
+        <section>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="text-sm font-medium">Anomaly Feed</h2>
+            <span className="text-[11px] text-muted-foreground">
+              {anomalies.length} events
+            </span>
+          </div>
+
+          {anomalies.length === 0 ? (
+            <div className="flex h-28 items-center justify-center rounded-xl border border-dashed text-xs text-muted-foreground">
+              {loading ? "Loading..." : "No anomalies detected"}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border">
+              <div className="max-h-80 overflow-y-auto">
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <th className="px-4 py-2.5 text-left font-medium">
+                        Type
+                      </th>
+                      <th className="px-4 py-2.5 text-left font-medium">
+                        Score
+                      </th>
+                      <th className="hidden px-4 py-2.5 text-left font-medium sm:table-cell">
+                        Confidence
+                      </th>
+                      <th className="hidden px-4 py-2.5 text-left font-medium md:table-cell">
+                        Location
+                      </th>
+                      <th className="px-4 py-2.5 text-left font-medium">
+                        Action
+                      </th>
+                      <th className="px-4 py-2.5 text-left font-medium">
+                        Time
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
-                    {anomalies.map((a) => (
-                      <tr key={a.id} className="transition-colors hover:bg-muted/50">
-                        <td className="py-2">
+                  <tbody>
+                    {anomalies.map((a, i) => (
+                      <tr
+                        key={a.id}
+                        className={`border-b border-border/50 transition-colors hover:bg-muted/30 ${
+                          i % 2 === 0 ? "" : "bg-muted/15"
+                        }`}
+                      >
+                        <td className="px-4 py-2.5">
                           <span
-                            className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                            className="inline-block rounded-md px-2 py-0.5 text-[10px] font-semibold"
                             style={{
-                              backgroundColor: `${anomalyTypeColors[a.anomaly_type] ?? "#6b7280"}20`,
-                              color: anomalyTypeColors[a.anomaly_type] ?? "#6b7280",
+                              color:
+                                ANOMALY_COLORS[a.anomaly_type] ?? "#6b7280",
+                              background: `${ANOMALY_COLORS[a.anomaly_type] ?? "#6b7280"}12`,
                             }}
                           >
                             {a.anomaly_type}
                           </span>
                         </td>
-                        <td className="py-2 font-mono text-xs">
+                        <td className="px-4 py-2.5 font-mono tabular-nums">
                           {(a.score * 100).toFixed(1)}%
                         </td>
-                        <td className="py-2 font-mono text-xs">
+                        <td className="hidden px-4 py-2.5 font-mono tabular-nums sm:table-cell">
                           {(a.confidence * 100).toFixed(0)}%
                         </td>
-                        <td className="py-2 text-xs text-muted-foreground">
-                          {a.lat.toFixed(4)}, {a.lng.toFixed(4)}
+                        <td className="hidden px-4 py-2.5 text-muted-foreground md:table-cell">
+                          {a.lat.toFixed(3)}, {a.lng.toFixed(3)}
                         </td>
-                        <td className="py-2 text-xs">
-                          {a.volunteer_id?.slice(0, 8) ?? "—"}
+                        <td className="px-4 py-2.5 text-muted-foreground">
+                          {a.recommended_action.replaceAll("_", " ")}
                         </td>
-                        <td className="py-2 text-xs text-muted-foreground">
-                          {a.recommended_action.replace(/_/g, " ")}
-                        </td>
-                        <td className="py-2 text-xs text-muted-foreground">
+                        <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
                           {a.detected_at
-                            ? new Date(a.detected_at).toLocaleTimeString()
+                            ? new Date(a.detected_at).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
                             : "—"}
                         </td>
                       </tr>
@@ -528,167 +610,129 @@ export default function DisruptionsPage() {
                   </tbody>
                 </table>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
+        </section>
 
-        {/* ── Model Info ─────────────────────────────────────────────── */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Brain className="h-5 w-5 text-purple-500" />
-              ML Pipeline Status
-            </CardTitle>
-            <CardDescription>
-              Model versions, training metadata, and graph routing statistics
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!modelStatus ? (
-              <p className="text-sm text-muted-foreground">Loading model status…</p>
-            ) : (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                {/* Anomaly Detector */}
-                <div className="rounded-lg border bg-gradient-to-br from-violet-50 to-purple-50 p-4 dark:from-violet-950/20 dark:to-purple-950/20">
-                  <h4 className="text-sm font-semibold text-violet-700 dark:text-violet-300">
-                    Anomaly Detector
-                  </h4>
-                  <div className="mt-2 space-y-1 text-xs">
-                    <p>
-                      <span className="text-muted-foreground">Algorithm:</span>{" "}
-                      {modelStatus.anomaly_detector.algorithm}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Estimators:</span>{" "}
-                      {modelStatus.anomaly_detector.n_estimators}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Training samples:</span>{" "}
-                      {modelStatus.anomaly_detector.n_training_samples}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Version:</span>{" "}
-                      {modelStatus.anomaly_detector.version}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Status:</span>{" "}
-                      <span
-                        className={
-                          modelStatus.anomaly_detector.fitted
-                            ? "text-emerald-600"
-                            : "text-rose-600"
-                        }
-                      >
-                        {modelStatus.anomaly_detector.fitted ? "● Active" : "○ Offline"}
-                      </span>
-                    </p>
-                    <p className="text-muted-foreground">
-                      Features: {modelStatus.anomaly_detector.features.join(", ")}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Graph Router */}
-                <div className="rounded-lg border bg-gradient-to-br from-blue-50 to-cyan-50 p-4 dark:from-blue-950/20 dark:to-cyan-950/20">
-                  <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-                    Graph Router (Dijkstra + A*)
-                  </h4>
-                  <div className="mt-2 space-y-1 text-xs">
-                    <p>
-                      <span className="text-muted-foreground">Algorithm:</span>{" "}
-                      {modelStatus.graph_router.algorithm}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Nodes:</span>{" "}
-                      {modelStatus.graph_router.graph_stats.nodes}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Edges:</span>{" "}
-                      {modelStatus.graph_router.graph_stats.edges}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Blocked:</span>{" "}
-                      <span className={modelStatus.graph_router.graph_stats.blocked_edges > 0 ? "text-rose-600" : ""}>
-                        {modelStatus.graph_router.graph_stats.blocked_edges}
-                      </span>
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Disrupted:</span>{" "}
-                      <span className={modelStatus.graph_router.graph_stats.disrupted_edges > 0 ? "text-amber-600" : ""}>
-                        {modelStatus.graph_router.graph_stats.disrupted_edges}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Disruption Predictor */}
-                <div className="rounded-lg border bg-gradient-to-br from-amber-50 to-orange-50 p-4 dark:from-amber-950/20 dark:to-orange-950/20">
-                  <h4 className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-                    Disruption Predictor
-                  </h4>
-                  <div className="mt-2 space-y-1 text-xs">
-                    <p>
-                      <span className="text-muted-foreground">Model:</span>{" "}
-                      {modelStatus.disruption_predictor.model}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Corridors:</span>{" "}
-                      {modelStatus.disruption_predictor.corridors_monitored}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Prediction source:</span> Gemini 2.5
-                      Flash + heuristic fallback
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Risk threshold:</span> 0.7
-                      (auto-reroute)
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Update cadence:</span> 15s
-                      real-time
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* ── Pipeline status ────────────────────────────────────────── */}
+        <section>
+          <h2 className="mb-3 text-sm font-medium">Pipeline</h2>
+          {!modelStatus ? (
+            <Skeleton />
+          ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <PipelineCard
+                title="Anomaly Detector"
+                accent="#7c3aed"
+                entries={[
+                  ["Algorithm", modelStatus.anomaly_detector.algorithm],
+                  ["Estimators", String(modelStatus.anomaly_detector.n_estimators)],
+                  ["Samples", String(modelStatus.anomaly_detector.n_training_samples)],
+                  ["Version", modelStatus.anomaly_detector.version],
+                  [
+                    "Status",
+                    modelStatus.anomaly_detector.fitted ? "Active" : "Offline",
+                  ],
+                ]}
+              />
+              <PipelineCard
+                title="Graph Router"
+                accent="#0284c7"
+                entries={[
+                  ["Algorithm", modelStatus.graph_router.algorithm],
+                  ["Nodes", String(modelStatus.graph_router.graph_stats.nodes)],
+                  ["Edges", String(modelStatus.graph_router.graph_stats.edges)],
+                  ["Blocked", String(modelStatus.graph_router.graph_stats.blocked_edges)],
+                  ["Disrupted", String(modelStatus.graph_router.graph_stats.disrupted_edges)],
+                ]}
+              />
+              <PipelineCard
+                title="Disruption Predictor"
+                accent="#ea580c"
+                entries={[
+                  ["Model", "Gemini 2.5 Flash + heuristic"],
+                  ["Corridors", String(modelStatus.disruption_predictor.corridors_monitored)],
+                  ["Threshold", "0.7 (auto-reroute)"],
+                  ["Cadence", "15 s real-time"],
+                ]}
+              />
+            </div>
+          )}
+        </section>
       </main>
     </>
   );
 }
 
-/* ── Components ─────────────────────────────────────────────────────────── */
+/* ── Sub-components ─────────────────────────────────────────────────────── */
 
-function KpiCard({
-  icon,
-  title,
+function MetricCard({
+  label,
   value,
-  sublabel,
-  accent,
+  sub,
+  trend,
+  valueColor,
 }: {
-  icon: React.ReactNode;
-  title: string;
+  label: string;
   value: number | string;
-  sublabel: string;
-  accent: string;
+  sub: string;
+  trend?: "up" | "stable";
+  valueColor?: string;
 }) {
   return (
-    <Card className="relative overflow-hidden">
-      <div
-        className="absolute inset-0 opacity-5"
-        style={{
-          background: `linear-gradient(135deg, var(--${accent}-500, #8b5cf6), transparent)`,
-        }}
-      />
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        {icon}
-      </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-semibold tracking-tight">{value}</div>
-        <p className="mt-1 text-xs text-muted-foreground">{sublabel}</p>
-      </CardContent>
-    </Card>
+    <div className="rounded-xl border bg-card p-4">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={`mt-1 text-2xl font-semibold tabular-nums leading-none tracking-tight ${valueColor ?? ""}`}
+      >
+        {value}
+      </p>
+      <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+        {trend === "up" && (
+          <TrendingUp className="h-3 w-3 text-amber-500" />
+        )}
+        {sub}
+      </p>
+    </div>
+  );
+}
+
+function PipelineCard({
+  title,
+  accent,
+  entries,
+}: {
+  title: string;
+  accent: string;
+  entries: [string, string][];
+}) {
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <div className="flex items-center gap-2">
+        <div
+          className="h-1.5 w-1.5 rounded-full"
+          style={{ backgroundColor: accent }}
+        />
+        <h3 className="text-xs font-semibold">{title}</h3>
+      </div>
+      <dl className="mt-3 space-y-1.5">
+        {entries.map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between text-[11px]">
+            <dt className="text-muted-foreground">{k}</dt>
+            <dd className="font-medium tabular-nums">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function Skeleton() {
+  return (
+    <div className="flex h-28 items-center justify-center rounded-xl border border-dashed text-xs text-muted-foreground">
+      Loading...
+    </div>
   );
 }
