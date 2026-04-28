@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   ShieldAlert,
   Activity,
@@ -12,6 +12,9 @@ import {
   Eye,
   RefreshCw,
   Database,
+  Filter,
+  Clock,
+  X,
 } from "lucide-react";
 import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip,
@@ -64,6 +67,10 @@ const ANOM_CLR: Record<string, string> = {
   congestion: "#7c3aed", spoofing: "#db2777", unknown: "#6b7280",
 };
 
+const RISK_LEVELS = ["all", "critical", "high", "medium", "low"] as const;
+const ANOM_TYPES = ["all", "stuck", "drift", "slowdown", "congestion", "spoofing"] as const;
+const TIME_OPTS = [{label: "1 h", hours: 1}, {label: "4 h", hours: 4}, {label: "12 h", hours: 12}, {label: "24 h", hours: 24}] as const;
+
 /* ── Page ───────────────────────────────────────────────────────────── */
 
 export default function DisruptionsPage() {
@@ -75,17 +82,22 @@ export default function DisruptionsPage() {
   const [busy, setBusy] = useState<"predict" | "seed" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  /* filters */
+  const [riskFilter, setRiskFilter] = useState<string>("all");
+  const [anomFilter, setAnomFilter] = useState<string>("all");
+  const [timeHours, setTimeHours] = useState(4);
+
   const load = useCallback(async () => {
     try {
       const [a, r, m] = await Promise.all([
-        api.get<AnomalyEvent[]>("/api/ml/anomalies?hours=4&limit=50"),
+        api.get<AnomalyEvent[]>(`/api/ml/anomalies?hours=${timeHours}&limit=100`),
         api.get<DisruptionPrediction>("/api/ml/risk-corridors"),
         api.get<ModelStatus>("/api/ml/model-status"),
       ]);
       setAnomalies(a); setPred(r); setModel(m); setError(null);
     } catch (e) { setError(e instanceof ApiCallError ? e.message : "Load failed"); }
     finally { setLoading(false); }
-  }, []);
+  }, [timeHours]);
 
   useEffect(() => { void load(); const t = setInterval(load, 15_000); return () => clearInterval(t); }, [load]);
 
@@ -106,9 +118,12 @@ export default function DisruptionsPage() {
     finally { setBusy(null); }
   };
 
-  /* derived */
-  const barData = Object.entries(anomalies.reduce((a, e) => { const t = e.anomaly_type || "unknown"; a[t] = (a[t] || 0) + 1; return a; }, {} as Record<string, number>)).map(([t, c]) => ({ type: t.charAt(0).toUpperCase() + t.slice(1), count: c }));
-  const radarData = pred?.corridors.map(c => ({ name: c.corridor_name.split(/[\s\u2013-]/)[0], risk: Math.round(c.risk_score * 100) })) ?? [];
+  /* derived + filtered */
+  const filteredCorridors = useMemo(() => pred?.corridors.filter(c => riskFilter === "all" || c.risk_level === riskFilter) ?? [], [pred, riskFilter]);
+  const filteredAnomalies = useMemo(() => anomalies.filter(a => anomFilter === "all" || a.anomaly_type === anomFilter), [anomalies, anomFilter]);
+  const barData = Object.entries(filteredAnomalies.reduce((a, e) => { const t = e.anomaly_type || "unknown"; a[t] = (a[t] || 0) + 1; return a; }, {} as Record<string, number>)).map(([t, c]) => ({ type: t.charAt(0).toUpperCase() + t.slice(1), count: c }));
+  const radarData = filteredCorridors.map(c => ({ name: c.corridor_name.split(/[\s\u2013-]/)[0], risk: Math.round(c.risk_score * 100) }));
+  const activeFilters = (riskFilter !== "all" ? 1 : 0) + (anomFilter !== "all" ? 1 : 0) + (timeHours !== 4 ? 1 : 0);
 
   return (
     <>
@@ -141,10 +156,26 @@ export default function DisruptionsPage() {
 
         {/* ── KPI cards ────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <Kpi icon={<ShieldAlert className="h-5 w-5 text-violet-500" />} label="Anomalies Detected" value={anomalies.length} sub="last 4 hours" />
-          <Kpi icon={<Route className="h-5 w-5 text-sky-500" />} label="Corridors Monitored" value={pred?.corridors.length ?? 0} sub="real-time scoring" />
+          <Kpi icon={<ShieldAlert className="h-5 w-5 text-violet-500" />} label="Anomalies Detected" value={filteredAnomalies.length} sub={`last ${timeHours} h${anomFilter !== "all" ? ` · ${anomFilter}` : ""}`} />
+          <Kpi icon={<Route className="h-5 w-5 text-sky-500" />} label="Corridors Monitored" value={filteredCorridors.length} sub={riskFilter !== "all" ? `filtered: ${riskFilter}` : "real-time scoring"} />
           <Kpi icon={<AlertTriangle className="h-5 w-5 text-rose-500" />} label="At-Risk Shipments" value={pred?.total_at_risk_shipments ?? 0} sub="across corridors" />
           <Kpi icon={<Activity className="h-5 w-5 text-emerald-500" />} label="Model Status" value={model?.anomaly_detector.fitted ? "Online" : "Offline"} sub={model?.anomaly_detector.algorithm ?? "\u2014"} highlight={model?.anomaly_detector.fitted ? "emerald" : "rose"} />
+        </div>
+
+        {/* ── Global filters ───────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground"><Filter className="h-3 w-3" /> Filters</span>
+          <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-0.5">
+            {RISK_LEVELS.map(r => <button key={r} onClick={() => setRiskFilter(r)} className={`rounded-md px-2.5 py-1 text-[11px] font-medium capitalize transition-all ${riskFilter === r ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{r}</button>)}
+          </div>
+          <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-0.5">
+            {ANOM_TYPES.map(t => <button key={t} onClick={() => setAnomFilter(t)} className={`rounded-md px-2.5 py-1 text-[11px] font-medium capitalize transition-all ${anomFilter === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{t}</button>)}
+          </div>
+          <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-0.5">
+            <Clock className="ml-1.5 h-3 w-3 text-muted-foreground" />
+            {TIME_OPTS.map(o => <button key={o.hours} onClick={() => setTimeHours(o.hours)} className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${timeHours === o.hours ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{o.label}</button>)}
+          </div>
+          {activeFilters > 0 && <button onClick={() => { setRiskFilter("all"); setAnomFilter("all"); setTimeHours(4); }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground transition hover:text-foreground"><X className="h-3 w-3" /> Clear</button>}
         </div>
 
         {/* ── Corridor risk ────────────────────────────────────────── */}
@@ -156,12 +187,12 @@ export default function DisruptionsPage() {
             <CardDescription>Predictive risk scores updated every 15 s. Risk &gt; 70 % triggers pre-emptive reroute.</CardDescription>
           </CardHeader>
           <CardContent>
-            {!pred ? <p className="py-8 text-center text-sm text-muted-foreground">Loading&hellip;</p> : (
+            {!pred ? <p className="py-8 text-center text-sm text-muted-foreground">Loading&hellip;</p> : filteredCorridors.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No corridors match filter</p> : (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {pred.corridors.map(c => {
+                {filteredCorridors.map(c => {
                   const s = RISK[c.risk_level] ?? RISK_FALLBACK;
                   return (
-                    <div key={c.corridor_id} className="rounded-xl border p-4 transition-shadow duration-200 hover:shadow-md" style={{ borderColor: s.border, background: s.bg, boxShadow: s.glow }}>
+                    <div key={c.corridor_id} className="rounded-xl border p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg" style={{ borderColor: s.border, background: s.bg, boxShadow: s.glow }}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold">{c.corridor_name}</p>
@@ -227,11 +258,11 @@ export default function DisruptionsPage() {
         <Card className="border-0 shadow-md shadow-black/[0.04]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base"><Eye className="h-4 w-4 text-amber-500" /> Live Anomaly Feed</CardTitle>
-            <CardDescription>Real-time anomalies detected by the Isolation Forest model &middot; {anomalies.length} events</CardDescription>
+            <CardDescription>Real-time anomalies detected by the Isolation Forest model &middot; {filteredAnomalies.length} of {anomalies.length} events{anomFilter !== "all" ? ` (${anomFilter})` : ""}</CardDescription>
           </CardHeader>
           <CardContent>
-            {anomalies.length === 0 ? (
-              <div className="flex h-24 items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">{loading ? "Loading\u2026" : "No anomalies detected"}</div>
+            {filteredAnomalies.length === 0 ? (
+              <div className="flex h-24 items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">{loading ? "Loading\u2026" : anomFilter !== "all" ? `No ${anomFilter} anomalies` : "No anomalies detected"}</div>
             ) : (
               <div className="max-h-72 overflow-y-auto rounded-lg border">
                 <table className="w-full text-[12px]">
@@ -243,8 +274,8 @@ export default function DisruptionsPage() {
                     <th className="px-4 py-2.5 text-left font-medium">Action</th>
                     <th className="px-4 py-2.5 text-left font-medium">Time</th>
                   </tr></thead>
-                  <tbody>{anomalies.map((a, i) => (
-                    <tr key={a.id} className={`border-b border-border/40 transition-colors hover:bg-muted/40 ${i % 2 ? "bg-muted/20" : ""}`}>
+                  <tbody>{filteredAnomalies.map((a, i) => (
+                    <tr key={a.id} className={`border-b border-border/40 transition-all duration-150 hover:bg-muted/40 hover:shadow-[inset_3px_0_0_0_#7c3aed] ${i % 2 ? "bg-muted/20" : ""}`}>
                       <td className="px-4 py-2"><span className="rounded-md px-2 py-0.5 text-[10px] font-semibold" style={{ color: ANOM_CLR[a.anomaly_type] ?? "#6b7280", background: `${ANOM_CLR[a.anomaly_type] ?? "#6b7280"}14` }}>{a.anomaly_type}</span></td>
                       <td className="px-4 py-2 font-mono tabular-nums">{(a.score * 100).toFixed(1)}%</td>
                       <td className="hidden px-4 py-2 font-mono tabular-nums sm:table-cell">{(a.confidence * 100).toFixed(0)}%</td>
@@ -284,7 +315,7 @@ export default function DisruptionsPage() {
 
 function Kpi({ icon, label, value, sub, highlight }: { icon: React.ReactNode; label: string; value: number | string; sub: string; highlight?: string }) {
   return (
-    <Card className="border-0 shadow-md shadow-black/[0.04]">
+    <Card className="border-0 shadow-md shadow-black/[0.04] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-xs font-medium text-muted-foreground">{label}</CardTitle>{icon}
       </CardHeader>
@@ -298,7 +329,7 @@ function Kpi({ icon, label, value, sub, highlight }: { icon: React.ReactNode; la
 
 function PipeCard({ accent, dot, title, items }: { accent: string; dot: string; title: string; items: [string, string][] }) {
   return (
-    <div className={`rounded-xl border bg-gradient-to-br ${accent} p-4`}>
+    <div className={`rounded-xl border bg-gradient-to-br ${accent} p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md`}>
       <div className="flex items-center gap-2"><div className="h-2 w-2 rounded-full" style={{ backgroundColor: dot }} /><h4 className="text-xs font-semibold">{title}</h4></div>
       <dl className="mt-3 space-y-1.5">{items.map(([k, v]) => (
         <div key={k} className="flex justify-between text-[11px]"><dt className="text-muted-foreground">{k}</dt><dd className="font-medium tabular-nums">{v}</dd></div>
