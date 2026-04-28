@@ -45,10 +45,13 @@ firebase-export-*/
 .DS_Store
 Thumbs.db
 
-# Secrets / service accounts
+# Secrets / service accounts (NEVER commit any of these)
 serviceAccount*.json
 *.pem
 *.key
+.render_sa_oneline.txt
+.deploy_secrets.md
+secrets/
 
 # Test
 coverage/
