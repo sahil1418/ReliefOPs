@@ -1,8 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd ../.. && pnpm install --frozen-lockfile && pnpm --filter @relief/web build",
-  "installCommand": "echo 'Install handled by buildCommand from monorepo root'",
-  "outputDirectory": ".next",
-  "framework": "nextjs",
-  "regions": ["sin1"]
+  "framework": "nextjs"
 }
