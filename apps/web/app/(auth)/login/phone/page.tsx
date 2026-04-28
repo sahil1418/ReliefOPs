@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import type { ConfirmationResult } from "firebase/auth";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -22,6 +22,16 @@ import { confirmPhoneSignIn, startPhoneSignIn } from "@/lib/auth";
 const RECAPTCHA_CONTAINER = "recaptcha-container";
 
 export default function PhoneLoginPage() {
+  // Suspense boundary required by Next.js 14 because PhoneLoginForm uses
+  // useSearchParams() — without it, the page can't be statically prerendered.
+  return (
+    <Suspense fallback={null}>
+      <PhoneLoginForm />
+    </Suspense>
+  );
+}
+
+function PhoneLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const dest = searchParams.get("from") ?? "/dashboard";

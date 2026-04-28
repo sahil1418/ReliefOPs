@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { z } from "zod";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -25,6 +25,16 @@ const credsSchema = z.object({
 });
 
 export default function LoginPage() {
+  // Suspense boundary required by Next.js 14 because LoginForm uses
+  // useSearchParams() — without it, the entire page bails out of static prerender.
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const dest = searchParams.get("from") ?? "/dashboard";
