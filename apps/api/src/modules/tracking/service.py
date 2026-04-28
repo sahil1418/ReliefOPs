@@ -161,11 +161,81 @@ def record_event(
             },
         )
 
+    # ── ML Anomaly Detection (Pillar 2) ─────────────────────────────────
+    anomaly_result = None
+    try:
+        from src.modules.ml.anomaly_detector import detect as ml_detect
+
+        current_ping = {
+            "lat": payload.location.lat,
+            "lng": payload.location.lng,
+            "speedKmh": payload.speedKmh,
+            "heading": payload.heading,
+            "ts": now.isoformat(),
+        }
+        # TODO: retrieve previous ping from RTDB for better feature extraction.
+        anomaly_result = ml_detect(current_ping, previous_ping=None)
+
+        if anomaly_result.is_anomaly:
+            _persist_anomaly(
+                anomaly_result, payload, volunteer_uid, now
+            )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("tracking.anomaly_detection_failed", error=str(exc)[:200])
+
     return {
         "ok": True,
         "aggregated": aggregated,
         "lastEventTs": (last_ts or now).isoformat(),
+        "anomaly": {
+            "detected": anomaly_result.is_anomaly if anomaly_result else False,
+            "score": anomaly_result.score if anomaly_result else 0,
+            "type": anomaly_result.anomaly_type.value if anomaly_result else "none",
+        } if anomaly_result else None,
     }
+
+
+def _persist_anomaly(
+    result: Any, payload: TrackingEventCreate, volunteer_uid: str, ts: datetime
+) -> None:
+    """Write anomaly event to Firestore + publish Pub/Sub."""
+    from firebase_admin import firestore as fb_fs
+
+    db = get_firestore()
+    ref = db.collection("anomaly_events").document()
+    ref.set({
+        "anomaly_type": result.anomaly_type.value,
+        "score": result.score,
+        "confidence": result.confidence,
+        "recommended_action": result.recommended_action,
+        "features": result.features_used,
+        "lat": payload.location.lat,
+        "lng": payload.location.lng,
+        "volunteerId": volunteer_uid,
+        "shipmentId": payload.shipmentId,
+        "detectedAt": ts,
+    })
+
+    publisher.publish(
+        "tracking.anomaly",
+        {
+            "anomalyId": ref.id,
+            "anomalyType": result.anomaly_type.value,
+            "score": result.score,
+            "volunteerId": volunteer_uid,
+            "shipmentId": payload.shipmentId,
+            "lat": payload.location.lat,
+            "lng": payload.location.lng,
+        },
+    )
+
+    log.info(
+        "tracking.anomaly_detected",
+        anomaly_id=ref.id,
+        anomaly_type=result.anomaly_type.value,
+        score=result.score,
+        volunteer_uid=volunteer_uid,
+    )
 
 
 def list_events(

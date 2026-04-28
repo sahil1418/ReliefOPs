@@ -9,6 +9,7 @@ import {
   Warehouse,
   Users,
   BarChart3,
+  ShieldAlert,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const NAV: NavItem[] = [
   { href: "/warehouses", label: "Warehouses", icon: Warehouse },
   { href: "/volunteers", label: "Volunteers", icon: Users },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/disruptions", label: "Disruptions ML", icon: ShieldAlert },
   { href: "/copilot", label: "Copilot", icon: Sparkles },
 ];
 

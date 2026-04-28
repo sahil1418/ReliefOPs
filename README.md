@@ -26,8 +26,14 @@ ReliefOps closes that gap. One platform: ingest demand → match supply → opti
 │  · Operational copilot — 5 function-calling tools (gemini-2.5-pro) │
 │  · Multimodal damage assessment + auto-reroute (gemini-2.5-flash)│
 ├─────────────────────────────────────────────────────────────────┤
+│ ML-powered supply chain disruption detection                     │
+│  Isolation Forest anomaly detector (scikit-learn, <1ms/ping)     │
+│  Gemini-hybrid corridor risk predictor (5 corridors live)        │
+│  Dijkstra + A* graph routing with dynamic disruption weights     │
+│  Pre-emptive reroute on risk > 0.7 (before bottleneck cascades)  │
+├─────────────────────────────────────────────────────────────────┤
 │ FastAPI modular monolith on Cloud Run                            │
-│  12 modules · 50+ REST endpoints · Pydantic v2 · 35/35 tests     │
+│  13 modules · 60+ REST endpoints · Pydantic v2 · 35/35 tests     │
 ├─────────────────────────────────────────────────────────────────┤
 │ Logistics intelligence                                           │
 │  OR-Tools VRPTW (capacity + time-windows + blocked areas)        │
@@ -48,6 +54,10 @@ ReliefOps closes that gap. One platform: ingest demand → match supply → opti
 | Claim | How to verify |
 |---|---|
 | `gemini-2.5-flash` extracts items + severity from text | `pytest -v src/tests/test_classifier.py::test_live_gemini_classifies_rice_and_ors` |
+| Isolation Forest detects stuck/drift/slowdown anomalies | `POST /api/ml/detect-anomaly` with anomalous GPS features |
+| Corridor risk prediction returns scored corridors | `GET /api/ml/risk-corridors` |
+| Dijkstra shortest path avoids disrupted edges | `POST /api/ml/graph/shortest-path` with blocked corridors |
+| ML model status shows active Isolation Forest | `GET /api/ml/model-status` |
 | Vector RAG ranks the cold-chain playbook #1 (cosine 0.754) | `scripts/seed_embeddings.py` then ask the copilot |
 | OR-Tools VRPTW respects capacity + time windows | `pytest -v src/tests/test_routing.py` |
 | GPS pings throttle to ~1 Firestore doc per minute | `bash scripts/smoke_commit8.sh` |
@@ -90,6 +100,7 @@ relief-logistics/
 ## Tech stack (pinned)
 
 **AI**: gemini-2.5-pro · gemini-2.5-flash · gemini-embedding-001 · `google-genai 0.5` · function calling · multimodal vision · structured JSON · Firestore vector search 768d
+**ML**: scikit-learn 1.5 (Isolation Forest transit anomaly detection) · Dijkstra + A* graph routing · Gemini-hybrid corridor risk prediction · numpy 1.26
 **Backend**: FastAPI 0.115 · Pydantic 2.9 · OR-Tools 9.11 VRPTW · firebase-admin 6.5 · Python 3.12
 **Web**: Next.js 14.2 (App Router) · React 18.3 · TypeScript 5.6 strict · Tailwind 3.4 · shadcn/ui · TanStack Table 8.20 · react-leaflet 4.2 · recharts 2.13 · react-markdown 9
 **Mobile**: Flutter 3.24 · Riverpod 2.5 · go_router 14 · geolocator 13 · hive 2.2 · connectivity_plus
@@ -177,6 +188,7 @@ Total time end-to-end: ~25 minutes. Free-tier deployable; `$0/mo` at demo scale.
 | 08 | Live GPS tracking (Realtime DB pings, 50s aggregation throttle, Cloud Function aggregator, Leaflet+OSM live map) |
 | 09 | Gemini AI copilot (5 function-calling tools, SSE streaming) + multimodal damage assessment + Firestore vector search |
 | 10 | Notifications (FCM + SMS), disruption monitor, analytics timeseries + Looker embed, GitHub Actions × 3 |
+| 11 | **ML Pipeline**: Isolation Forest transit anomaly detection (scikit-learn), Gemini-hybrid corridor risk prediction, Dijkstra + A* graph routing with dynamic disruption weights, Supply Chain Intelligence dashboard (`/disruptions`), pre-emptive reroute on GPS anomalies |
 
 ---
 

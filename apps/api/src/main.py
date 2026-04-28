@@ -27,6 +27,7 @@ from src.modules.requests.router import router as requests_router
 from src.modules.routing.router import router as routing_router
 from src.modules.shipments.router import router as shipments_router
 from src.modules.tracking.router import router as tracking_router
+from src.modules.ml.router import router as ml_router
 
 settings = get_settings()
 configure_logging(settings.env)
@@ -108,3 +109,4 @@ app.include_router(copilot_router)
 app.include_router(notifications_router)
 app.include_router(admin_router)
 app.include_router(ai_router)
+app.include_router(ml_router)
