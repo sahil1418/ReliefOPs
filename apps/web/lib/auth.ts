@@ -143,9 +143,15 @@ export async function signOut(): Promise<void> {
 /**
  * Returns the current ID token for outgoing API calls. Forces refresh if expired.
  * Returns `null` when there's no signed-in user.
+ *
+ * Waits for Firebase to hydrate auth state from IndexedDB / localStorage before
+ * checking `currentUser` — without this, page-mount-time fetches fire before
+ * hydration completes and end up sending no Authorization header (race condition).
  */
 export async function getIdToken(): Promise<string | null> {
-  const user = firebaseAuth().currentUser;
+  const auth = firebaseAuth();
+  await auth.authStateReady();
+  const user = auth.currentUser;
   if (!user) return null;
   return user.getIdToken();
 }
