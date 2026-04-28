@@ -16,7 +16,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import {
-  CircleMarker,
   MapContainer,
   Marker,
   Popup,
@@ -102,7 +101,6 @@ function severityColor(s: number): string {
   if (s === 2) return "#22d3ee";
   return "#10b981";
 }
-const SEVERITY_COLOR = { 5: "#ef4444", 4: "#f97316", 3: "#eab308", 2: "#22d3ee", 1: "#10b981" } as const;
 
 const VOLUNTEER_COLOR = "#60a5fa"; // light blue
 
@@ -263,15 +261,15 @@ export function OpsMap({ defaultCenter }: { defaultCenter: LatLng }) {
   }, [disasters]);
 
   return (
-    <div className="relative h-[480px] w-full overflow-hidden rounded-xl border border-slate-800">
-      {/* Top toolbar — CivicLoop-style filter chips + heatmap toggle */}
-      <div className="pointer-events-none absolute inset-x-3 top-3 z-[400] flex items-center gap-2">
-        <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/85 px-2 py-1 text-xs backdrop-blur">
+    <div className="space-y-2">
+      {/* Toolbar above the map (Leaflet panes can shadow z-indexed siblings, so render outside) */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 p-2">
+        <div className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/85 px-2 py-1 text-xs">
           <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
           <span className="font-mono text-[10px] uppercase tracking-wider text-slate-300">ReliefOps Live</span>
         </div>
 
-        <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/85 px-1 py-1 text-xs backdrop-blur">
+        <div className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/85 px-1 py-1 text-xs">
           {(["all", "active", "contained", "closed"] as const).map((f) => (
             <button
               key={f}
@@ -295,7 +293,7 @@ export function OpsMap({ defaultCenter }: { defaultCenter: LatLng }) {
           <button
             type="button"
             onClick={() => setHeatmap((h) => !h)}
-            className={`pointer-events-auto flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider backdrop-blur transition ${
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${
               heatmap
                 ? "border-orange-500 bg-orange-500/30 text-orange-200"
                 : "border-slate-700 bg-slate-900/85 text-slate-300 hover:bg-slate-800"
@@ -307,8 +305,9 @@ export function OpsMap({ defaultCenter }: { defaultCenter: LatLng }) {
         </div>
       </div>
 
-      {/* Bottom-left legend */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-[400] rounded-lg border border-slate-700 bg-slate-900/85 px-3 py-2 text-xs text-slate-300 backdrop-blur">
+      <div className="relative h-[480px] w-full overflow-hidden rounded-xl border border-slate-800">
+      {/* Bottom-left legend (kept inside; bumped above leaflet control z-index of 1000) */}
+      <div className="pointer-events-none absolute bottom-3 left-3 z-[1100] rounded-lg border border-slate-700 bg-slate-900/85 px-3 py-2 text-xs text-slate-300 backdrop-blur">
         <div className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-500">Severity</div>
         <div className="flex items-center gap-3">
           {[5, 4, 3, 2, 1].map((s) => {
@@ -387,16 +386,8 @@ export function OpsMap({ defaultCenter }: { defaultCenter: LatLng }) {
             </Marker>
           ))}
 
-        {!heatmap &&
-          live.map(([uid, p]) => (
-            <CircleMarker
-              key={`pulse-${uid}`}
-              center={[p.lat, p.lng]}
-              radius={20}
-              pathOptions={{ color: VOLUNTEER_COLOR, fillOpacity: 0.05, weight: 1 }}
-            />
-          ))}
       </MapContainer>
+      </div>
     </div>
   );
 }
