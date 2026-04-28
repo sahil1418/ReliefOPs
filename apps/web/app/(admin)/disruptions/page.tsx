@@ -103,11 +103,13 @@ type ModelStatus = {
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 
+const RISK_FALLBACK = { color: "#16a34a", bg: "rgba(22,163,74,0.06)", border: "rgba(22,163,74,0.18)" };
+
 const RISK_CONFIG: Record<string, { color: string; bg: string; border: string }> = {
   critical: { color: "#dc2626", bg: "rgba(220,38,38,0.06)", border: "rgba(220,38,38,0.18)" },
   high:     { color: "#ea580c", bg: "rgba(234,88,12,0.06)", border: "rgba(234,88,12,0.18)" },
   medium:   { color: "#ca8a04", bg: "rgba(202,138,4,0.06)", border: "rgba(202,138,4,0.18)" },
-  low:      { color: "#16a34a", bg: "rgba(22,163,74,0.06)", border: "rgba(22,163,74,0.18)" },
+  low:      RISK_FALLBACK,
 };
 
 const ANOMALY_COLORS: Record<string, string> = {
@@ -326,7 +328,7 @@ export default function DisruptionsPage() {
           ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {prediction.corridors.map((c) => {
-                const cfg = RISK_CONFIG[c.risk_level] ?? RISK_CONFIG.low;
+                const cfg = RISK_CONFIG[c.risk_level] ?? RISK_FALLBACK;
                 return (
                   <div
                     key={c.corridor_id}
