@@ -1,0 +1,136 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+    function role()        { return request.auth.token.role; }
+    function orgId()       { return request.auth.token.orgId; }
+    function isAuth()      { return request.auth != null; }
+    function isAdmin()     { return isAuth() && role() in ['super_admin', 'ngo_admin']; }
+    function isCoord()     { return isAuth() && role() == 'coordinator'; }
+    function isVolunteer() { return isAuth() && role() == 'volunteer'; }
+    function sameOrg(data) { return isAuth() && data.orgId == orgId(); }
+
+    // ── Users ────────────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read:  if isAuth() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // ── Organizations ────────────────────────────────────────────────────
+    match /organizations/{id} {
+      allow read:  if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ── Disasters ────────────────────────────────────────────────────────
+    match /disasters/{id} {
+      allow read:  if isAuth();
+      allow write: if isAdmin() || isCoord();
+    }
+
+    // ── Demand requests ──────────────────────────────────────────────────
+    match /demand_requests/{id} {
+      allow read:   if isAuth();
+      allow create: if isAuth();
+      allow update: if isAdmin() || isCoord();
+      allow delete: if false;
+    }
+
+    // ── Shipments ────────────────────────────────────────────────────────
+    match /shipments/{id} {
+      allow read: if isAuth() && (
+        isAdmin() || isCoord() ||
+        (isVolunteer() && resource.data.assignedVolunteerId == request.auth.uid)
+      );
+      allow create: if isAdmin() || isCoord();
+      // Volunteers may only mutate status / etaCurrent / deliveredAt on their own assignments.
+      allow update: if (isAdmin() || isCoord()) ||
+        (isVolunteer()
+          && resource.data.assignedVolunteerId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'etaCurrent', 'deliveredAt']));
+      allow delete: if false;
+    }
+
+    // ── Inventory ────────────────────────────────────────────────────────
+    match /inventory_items/{id} {
+      allow read:  if isAuth();
+      allow write: if isAdmin() || isCoord();
+    }
+
+    match /warehouses/{id} {
+      allow read:  if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ── Volunteers / vehicles ───────────────────────────────────────────
+    match /volunteers/{id} {
+      allow read:  if isAuth();
+      allow write: if isAdmin() || isCoord() ||
+                      (isVolunteer() && resource.data.userId == request.auth.uid);
+    }
+    match /vehicles/{id} {
+      allow read:  if isAuth();
+      allow write: if isAdmin() || isCoord();
+    }
+
+    // ── Tracking events (immutable, append-only) ────────────────────────
+    match /tracking_events/{id} {
+      allow create: if isVolunteer()
+        && request.resource.data.volunteerId == request.auth.uid;
+      allow read:   if isAdmin() || isCoord();
+      allow update, delete: if false;
+    }
+
+    // ── Routes ──────────────────────────────────────────────────────────
+    match /routes/{id} {
+      allow read:  if isAuth();
+      allow write: if isAdmin() || isCoord();
+    }
+
+    // ── Deliveries (PoD) ────────────────────────────────────────────────
+    match /deliveries/{id} {
+      allow read:   if isAdmin() || isCoord();
+      allow create: if isVolunteer();
+      allow update, delete: if false;
+    }
+
+    // ── Alerts ──────────────────────────────────────────────────────────
+    match /alerts/{id} {
+      allow read:  if isAuth();
+      allow write: if isAdmin() || isCoord();
+    }
+
+    // ── Audit logs (immutable) ──────────────────────────────────────────
+    match /audit_logs/{id} {
+      allow read:   if isAdmin();
+      allow create: if isAuth();
+      allow update, delete: if false;
+    }
+
+    // ── AI conversations (per-user) ─────────────────────────────────────
+    match /ai_conversations/{id} {
+      allow read, write: if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /ai_embeddings/{id} {
+      allow read:  if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ── Predictions / route cache (server-managed) ──────────────────────
+    match /predictions/{id} {
+      allow read:  if isAuth();
+      allow write: if false;  // only admin SDK
+    }
+    match /route_cache/{id} {
+      allow read, write: if false;  // only admin SDK
+    }
+    match /rate_limits/{id} {
+      allow read, write: if false;  // only admin SDK
+    }
+  }
+}

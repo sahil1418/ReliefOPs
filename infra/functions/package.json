@@ -1,0 +1,23 @@
+{
+  "name": "relief-functions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloud Functions for ReliefOps (location aggregator added in COMMIT 8).",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions --config ../firebase.json",
+    "deploy": "firebase deploy --only functions --config ../firebase.json"
+  },
+  "dependencies": {
+    "firebase-admin": "12.6.0",
+    "firebase-functions": "6.0.1",
+    "@google-cloud/pubsub": "4.7.2"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  },
+  "engines": {
+    "node": "20"
+  }
+}

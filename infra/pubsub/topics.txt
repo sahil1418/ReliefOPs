@@ -1,0 +1,9 @@
+# Pub/Sub topic list for ReliefOps. Created by infra/bootstrap.sh.
+# Producers / consumers are documented per topic so call-sites are easy to find.
+
+shipment.created           # producer: shipments/router  | consumer: notifications, analytics
+shipment.status_changed    # producer: shipments/router  | consumer: notifications, audit_logs
+location.updated           # producer: locationAggregator (Cloud Function) | consumer: analytics
+delay.predicted            # producer: predictions/delay | consumer: notifications
+disruption.detected        # producer: disruption_monitor (Cloud Scheduler) | consumer: routing/reroute
+delivery.completed         # producer: shipments/router (status=delivered) | consumer: analytics_sync

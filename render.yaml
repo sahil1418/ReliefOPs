@@ -1,0 +1,51 @@
+# Render Blueprint · ReliefOps backend
+# Connect this repo at https://dashboard.render.com/select-repo and Render will
+# read this file automatically. All env vars below get prompted in the dashboard;
+# fill them in once and never touch them again.
+
+services:
+  - type: web
+    name: reliefops-api
+    runtime: docker
+    region: singapore                  # Closest Render region to a Bangladesh demo; change to oregon/frankfurt if you prefer
+    plan: free                          # 512 MB RAM, sleeps after 15 min idle
+    branch: main
+    autoDeploy: true
+    rootDir: apps/api                   # Build context = apps/api
+    dockerfilePath: ./Dockerfile        # Relative to rootDir
+    healthCheckPath: /health
+    envVars:
+      # Public (deploy-time)
+      - key: ENV
+        value: production
+      - key: GCP_PROJECT_ID
+        sync: false                     # Set in dashboard once
+      - key: GCP_REGION
+        value: us-central1
+      - key: CORS_ORIGINS
+        sync: false                     # e.g. https://reliefops.vercel.app
+
+      # Secrets (set in Render dashboard, marked sensitive)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FIREBASE_ADMIN_SA_JSON
+        sync: false                     # Paste the WHOLE JSON file contents here
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false                     # Optional; routing falls back to OR-Tools-only if absent
+      - key: TWILIO_ACCOUNT_SID
+        sync: false                     # Optional
+      - key: TWILIO_AUTH_TOKEN
+        sync: false                     # Optional
+      - key: TWILIO_FROM
+        sync: false                     # Optional
+      - key: SENDGRID_API_KEY
+        sync: false                     # Optional
+      - key: OPENWEATHER_API_KEY
+        sync: false                     # Optional
+
+      # Production gemini model selection. Free tier has Pro RPD=0 on most accounts;
+      # set GEMINI_MODEL_PRO=gemini-2.5-flash for full free-tier compatibility.
+      - key: GEMINI_MODEL_PRO
+        value: gemini-2.5-flash
+      - key: GEMINI_MODEL_FLASH
+        value: gemini-2.5-flash

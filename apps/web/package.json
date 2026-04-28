@@ -1,0 +1,53 @@
+{
+  "name": "@relief/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "14.2.15",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "firebase": "10.13.2",
+    "next-firebase-auth-edge": "1.8.2",
+    "@vis.gl/react-google-maps": "1.5.0",
+    "@tanstack/react-table": "8.20.5",
+    "@tanstack/react-query": "5.59.16",
+    "@tremor/react": "3.18.3",
+    "@radix-ui/react-dialog": "1.1.2",
+    "@radix-ui/react-dropdown-menu": "2.1.2",
+    "@radix-ui/react-slot": "1.1.0",
+    "class-variance-authority": "0.7.0",
+    "clsx": "2.1.1",
+    "tailwind-merge": "2.5.4",
+    "tailwindcss-animate": "1.0.7",
+    "lucide-react": "0.453.0",
+    "zod": "3.23.8",
+    "react-hook-form": "7.53.1",
+    "@hookform/resolvers": "3.9.0",
+    "recharts": "2.13.0",
+    "date-fns": "4.1.0",
+    "@relief/shared-types": "workspace:*",
+    "leaflet": "1.9.4",
+    "react-leaflet": "4.2.1",
+    "react-markdown": "9.0.1",
+    "remark-gfm": "4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/node": "22.7.5",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@types/leaflet": "1.9.12",
+    "tailwindcss": "3.4.13",
+    "postcss": "8.4.47",
+    "autoprefixer": "10.4.20",
+    "eslint": "8.57.1",
+    "eslint-config-next": "14.2.15"
+  }
+}

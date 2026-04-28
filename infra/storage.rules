@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuth() { return request.auth != null; }
+    function role()   { return request.auth.token.role; }
+    function isAdmin()  { return isAuth() && role() in ['super_admin', 'ngo_admin']; }
+    function isCoord()  { return isAuth() && role() == 'coordinator'; }
+
+    // PoD photos & signatures — volunteer uploads, staff reads.
+    match /pod/{shipmentId}/{file=**} {
+      allow read:  if isAdmin() || isCoord();
+      allow write: if isAuth()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Demand-request photos — anyone authenticated can upload, staff reads.
+    match /requests/{requestId}/{file=**} {
+      allow read:  if isAuth();
+      allow write: if isAuth()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Damage assessment uploads.
+    match /damage/{disasterId}/{file=**} {
+      allow read:  if isAuth();
+      allow write: if isAuth()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

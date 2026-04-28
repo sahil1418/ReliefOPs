@@ -1,0 +1,66 @@
+name: deploy-api
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: relief-logistics
+  REGION: us-central1
+  REPO: relief
+  SERVICE: relief-api
+  IMAGE: us-central1-docker.pkg.dev/relief-logistics/relief/api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Auth via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build + push image
+        run: |
+          cd apps/api
+          gcloud builds submit \
+            --tag ${{ env.IMAGE }}:${{ github.sha }} \
+            --tag ${{ env.IMAGE }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image ${{ env.IMAGE }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances 10 \
+            --memory 1Gi \
+            --cpu 1 \
+            --concurrency 40 \
+            --service-account ${{ secrets.RUN_SA }} \
+            --set-env-vars "ENV=production,GCP_PROJECT_ID=${{ env.PROJECT_ID }},GCP_REGION=${{ env.REGION }},CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}" \
+            --set-secrets "GEMINI_API_KEY=gemini-key:latest,GOOGLE_MAPS_API_KEY=gmaps-key:latest,TWILIO_AUTH_TOKEN=twilio-token:latest,SENDGRID_API_KEY=sendgrid-key:latest,OPENWEATHER_API_KEY=openweather-key:latest"
+
+      - name: Smoke check /health
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} --region ${{ env.REGION }} --format='value(status.url)')
+          curl -fsS "$URL/health" | tee health.json
+          grep -q '"status":"ok"' health.json

@@ -1,0 +1,21 @@
+{
+  "rules": {
+    "locations": {
+      "$volunteerId": {
+        ".read": "auth != null && (auth.token.role == 'super_admin' || auth.token.role == 'ngo_admin' || auth.token.role == 'coordinator' || auth.uid == $volunteerId)",
+        ".write": "auth != null && auth.uid == $volunteerId",
+        ".validate": "newData.hasChildren(['lat', 'lng', 'ts'])"
+      }
+    },
+    "presence": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

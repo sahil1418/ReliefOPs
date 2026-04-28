@@ -1,0 +1,31 @@
+# Build context speedup for Render / Cloud Run docker builds.
+# Only apps/api/ is the docker context, but a top-level .dockerignore catches stray pulls.
+
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/build
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.dart_tool
+**/.flutter-plugins*
+
+# Don't ship local env files into the image
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Test scaffolding + docs
+**/tests/.coverage
+**/htmlcov
+*.md
+LICENSE
+.git
+.github
+.tmp
+.vscode
+.idea
