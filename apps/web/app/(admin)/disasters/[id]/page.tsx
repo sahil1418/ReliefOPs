@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { format } from "date-fns";
 
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
+import { GeminiBadge } from "@/components/ai/GeminiBadge";
 import {
   DisasterStatusBadge,
   SeverityBadge,
@@ -160,10 +161,13 @@ export default function DisasterDetailPage({ params }: { params: { id: string } 
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Demand requests</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-lg">Demand requests</CardTitle>
+              <GeminiBadge model="Gemini 2.5 Flash" detail="structured JSON" />
+            </div>
             <CardDescription>
-              Sorted by urgency (highest first). Severity, urgency, and category come from Gemini 2.5 Flash;
-              click <em>Create shipment</em> to dispatch.
+              Sorted by urgency (highest first). Severity, urgency, and category are extracted live from
+              free-text intake by Gemini 2.5 Flash with a strict response schema. Click <em>Create shipment</em> to dispatch.
             </CardDescription>
           </CardHeader>
           <CardContent>

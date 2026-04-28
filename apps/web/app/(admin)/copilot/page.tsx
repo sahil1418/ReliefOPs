@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
+import { GeminiBadge } from "@/components/ai/GeminiBadge";
 import { ChatComposer } from "@/components/copilot/ChatComposer";
 import { ChatMessage, type Message, type ToolEvent } from "@/components/copilot/ChatMessage";
 import { PhotoAssess } from "@/components/copilot/PhotoAssess";
@@ -115,9 +116,12 @@ export default function CopilotPage() {
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-base">Operational copilot</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base">Operational copilot</CardTitle>
+                    <GeminiBadge model="Gemini 2.5 Pro" detail="function calling" />
+                  </div>
                   <CardDescription>
-                    Gemini 2.5 Pro · 5 function-calling tools · streamed via SSE
+                    5 function-calling tools · streamed via SSE · vector search over 768d embeddings
                   </CardDescription>
                 </div>
                 <button

@@ -15,6 +15,7 @@ from src.core.errors import (
 from src.core.firebase import init_firebase
 from src.core.logging import configure_logging, get_logger
 from src.modules.admin.router import router as admin_router
+from src.modules.ai.router import router as ai_router
 from src.modules.ai_copilot.router import router as copilot_router
 from src.modules.analytics.router import router as analytics_router
 from src.modules.auth.router import router as auth_router
@@ -106,3 +107,4 @@ app.include_router(predictions_router)
 app.include_router(copilot_router)
 app.include_router(notifications_router)
 app.include_router(admin_router)
+app.include_router(ai_router)

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Camera, AlertTriangle, CheckCircle2 } from "lucide-react";
 
+import { GeminiBadge } from "@/components/ai/GeminiBadge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -132,6 +133,7 @@ export function PhotoAssess() {
                 <span className="text-sm font-semibold capitalize">
                   {result.blockageType.replace("_", " ")}
                 </span>
+                <GeminiBadge model="Gemini 2.5 Flash" detail="multimodal" className="ml-1" />
                 <span className={`ml-auto rounded-full px-2 py-0.5 text-xs ${
                   result.severity >= 4
                     ? "bg-red-100 text-red-700"

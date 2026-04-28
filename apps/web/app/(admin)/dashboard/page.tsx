@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Truck, Users, Package } from "lucide-react";
 
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
+import { AIActivityFeed } from "@/components/ai/AIActivityFeed";
+import { AIInsightsCard } from "@/components/ai/AIInsightsCard";
 import { OpsMapDynamic } from "@/components/map/OpsMapDynamic";
 import {
   Card,
@@ -85,6 +87,13 @@ export default function DashboardPage() {
             {error} — is FastAPI running on <code>{process.env.NEXT_PUBLIC_API_BASE_URL}</code>?
           </p>
         )}
+
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <AIInsightsCard />
+          </div>
+          <AIActivityFeed />
+        </div>
 
         <Card className="mt-6">
           <CardHeader>
