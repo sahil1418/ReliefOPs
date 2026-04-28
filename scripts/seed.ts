@@ -18,17 +18,57 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore, GeoPoint, Timestamp } from "firebase-admin/firestore";
 import { getAuth, type UserRecord } from "firebase-admin/auth";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-// ─── Emulator wiring ─────────────────────────────────────────────────────────
-const PROJECT_ID = process.env.GCLOUD_PROJECT ?? "relief-logistics";
-process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
-process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9099";
-process.env.FIREBASE_DATABASE_EMULATOR_HOST ??= "127.0.0.1:9000";
-process.env.FIREBASE_STORAGE_EMULATOR_HOST ??= "127.0.0.1:9199";
+// ─── Target selection ────────────────────────────────────────────────────────
+// Default: emulators (safe local dev). Pass `--prod` (or set SEED_TARGET=production)
+// to write to a real Firebase project — requires GOOGLE_APPLICATION_CREDENTIALS or
+// `--sa <path>` pointing at a service-account JSON.
+const argv = process.argv.slice(2);
+const IS_PROD =
+  argv.includes("--prod") || process.env.SEED_TARGET === "production";
+
+const saArgIdx = argv.indexOf("--sa");
+const SA_PATH = saArgIdx >= 0 ? argv[saArgIdx + 1] : process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+if (IS_PROD) {
+  if (!SA_PATH) {
+    console.error("✗ --prod requires --sa <serviceAccount.json> or GOOGLE_APPLICATION_CREDENTIALS env var.");
+    process.exit(1);
+  }
+  // Wipe emulator hosts so the Admin SDK targets the real project.
+  for (const k of [
+    "FIRESTORE_EMULATOR_HOST",
+    "FIREBASE_AUTH_EMULATOR_HOST",
+    "FIREBASE_DATABASE_EMULATOR_HOST",
+    "FIREBASE_STORAGE_EMULATOR_HOST",
+  ]) {
+    delete process.env[k];
+  }
+} else {
+  process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
+  process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9099";
+  process.env.FIREBASE_DATABASE_EMULATOR_HOST ??= "127.0.0.1:9000";
+  process.env.FIREBASE_STORAGE_EMULATOR_HOST ??= "127.0.0.1:9199";
+}
+
+const PROJECT_ID = IS_PROD
+  ? (() => {
+      const sa = JSON.parse(readFileSync(resolve(SA_PATH!), "utf8"));
+      return sa.project_id as string;
+    })()
+  : (process.env.GCLOUD_PROJECT ?? "relief-logistics");
+
 process.env.GCLOUD_PROJECT = PROJECT_ID;
 
 if (!getApps().length) {
-  initializeApp({ projectId: PROJECT_ID });
+  if (IS_PROD) {
+    const sa = JSON.parse(readFileSync(resolve(SA_PATH!), "utf8"));
+    initializeApp({ projectId: PROJECT_ID, credential: cert(sa) });
+  } else {
+    initializeApp({ projectId: PROJECT_ID });
+  }
 }
 
 const db = getFirestore();
@@ -425,10 +465,24 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const skipClear = args.includes("--no-clear");
 
-  console.log(`ReliefOps emulator seed — project=${PROJECT_ID}`);
-  console.log(`  Firestore @ ${process.env.FIRESTORE_EMULATOR_HOST}`);
-  console.log(`  Auth      @ ${process.env.FIREBASE_AUTH_EMULATOR_HOST}`);
-  console.log("");
+  if (IS_PROD) {
+    console.log("");
+    console.log("█████████████████████████████████████████████████████████████████");
+    console.log("  PRODUCTION TARGET — writing to real Firebase project");
+    console.log(`  Project: ${PROJECT_ID}`);
+    console.log(`  Service account: ${SA_PATH}`);
+    if (!skipClear) {
+      console.log("  WARNING: clearAll() will DELETE all Auth users + listed collection docs.");
+      console.log("  Pass --no-clear to skip the destructive step.");
+    }
+    console.log("█████████████████████████████████████████████████████████████████");
+    console.log("");
+  } else {
+    console.log(`ReliefOps emulator seed — project=${PROJECT_ID}`);
+    console.log(`  Firestore @ ${process.env.FIRESTORE_EMULATOR_HOST}`);
+    console.log(`  Auth      @ ${process.env.FIREBASE_AUTH_EMULATOR_HOST}`);
+    console.log("");
+  }
 
   if (!skipClear) await clearAll();
   await seedOrgs();
