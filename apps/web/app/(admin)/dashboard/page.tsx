@@ -90,9 +90,9 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Operations map</CardTitle>
             <CardDescription>
-              Live disaster zones across South Asia + every active volunteer's GPS ping (15&thinsp;s
-              cadence via Firebase Realtime DB). Severity-coloured pulses, filter by status, toggle
-              the heatmap view.
+              Live disaster zones across South Asia plus every active volunteer&apos;s GPS ping
+              (15&thinsp;s cadence via Firebase Realtime DB). Severity-coloured pulses, filter by
+              status, toggle the heatmap view.
             </CardDescription>
           </CardHeader>
           <CardContent>
