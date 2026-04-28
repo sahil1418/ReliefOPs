@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AuthProvider } from "@/components/providers/AuthProvider";
+import { Splash } from "@/components/Splash";
 
 import "./globals.css";
 
@@ -18,6 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-background font-sans antialiased">
+        <Splash />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

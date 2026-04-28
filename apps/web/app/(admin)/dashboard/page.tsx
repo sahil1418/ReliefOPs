@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Truck, Users, Package } from "lucide-react";
 
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
-import { FleetMapDynamic } from "@/components/map/FleetMapDynamic";
+import { OpsMapDynamic } from "@/components/map/OpsMapDynamic";
 import {
   Card,
   CardContent,
@@ -88,14 +88,15 @@ export default function DashboardPage() {
 
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle>Live fleet</CardTitle>
+            <CardTitle>Operations map</CardTitle>
             <CardDescription>
-              Every active volunteer broadcasts a 15-second GPS ping into Firebase Realtime DB; this
-              map subscribes and animates each pin live.
+              Live disaster zones across South Asia + every active volunteer's GPS ping (15&thinsp;s
+              cadence via Firebase Realtime DB). Severity-coloured pulses, filter by status, toggle
+              the heatmap view.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <FleetMapDynamic defaultCenter={{ lat: 21.4272, lng: 92.0058 }} />
+            <OpsMapDynamic defaultCenter={{ lat: 22.5, lng: 82 }} />
           </CardContent>
         </Card>
 

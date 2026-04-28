@@ -34,6 +34,7 @@
     "date-fns": "4.1.0",
     "@relief/shared-types": "workspace:*",
     "leaflet": "1.9.4",
+    "leaflet.heat": "0.2.0",
     "react-leaflet": "4.2.1",
     "react-markdown": "9.0.1",
     "remark-gfm": "4.0.0"
