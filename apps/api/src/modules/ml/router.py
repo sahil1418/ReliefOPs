@@ -255,3 +255,122 @@ async def graph_stats(_user: CurrentUser) -> GraphStatsPayload:
             for n in graph.nodes.values()
         ],
     })
+
+
+# ── Demo Seed ───────────────────────────────────────────────────────────────
+
+
+class SeedResult(BaseModel):
+    anomalies_created: int
+    tracking_events_created: int
+    corridors_populated: list[str]
+
+
+class SeedPayload(ApiResponse[SeedResult]):
+    pass
+
+
+@router.post("/seed-demo", response_model=SeedPayload)
+async def seed_demo(_user: CurrentUser) -> SeedPayload:
+    """Populate Firestore with realistic demo anomaly + tracking data.
+
+    Generates synthetic but realistic GPS anomaly events across all
+    monitored corridors for the last 4 hours. Useful for demo/hackathon
+    presentations to show the dashboard working with live data.
+    """
+    import random
+
+    db = get_firestore()
+    now = datetime.now(timezone.utc)
+    rng = random.Random(int(now.timestamp()) // 300)  # Changes every 5 min.
+
+    corridors = disruption_predictor.DEFAULT_CORRIDORS
+    anomaly_types = ["stuck", "drift", "slowdown", "congestion", "spoofing"]
+    actions = {
+        "stuck": "alert_coordinator_vehicle_stuck",
+        "drift": "verify_volunteer_location_drift",
+        "slowdown": "check_route_for_congestion",
+        "congestion": "consider_alternate_route",
+        "spoofing": "verify_gps_integrity",
+    }
+
+    anomalies_created = 0
+    tracking_created = 0
+    corridors_populated: list[str] = []
+
+    for corridor in corridors:
+        # Each corridor gets 3–8 anomalies proportional to its base_risk.
+        n_anomalies = rng.randint(2, max(3, int(corridor.base_risk * 15)))
+        n_tracking = rng.randint(5, 15)
+
+        for i in range(n_anomalies):
+            # Scatter events within corridor radius.
+            offset_lat = rng.uniform(-0.08, 0.08) * (corridor.radius_km / 10)
+            offset_lng = rng.uniform(-0.08, 0.08) * (corridor.radius_km / 10)
+            a_type = rng.choices(
+                anomaly_types,
+                weights=[3, 2, 4, 3, 1],  # slowdown most common
+                k=1,
+            )[0]
+            score = rng.uniform(0.6, 0.95)
+            minutes_ago = rng.randint(5, 230)
+
+            ref = db.collection("anomaly_events").document()
+            ref.set({
+                "anomaly_type": a_type,
+                "score": round(score, 4),
+                "confidence": round(score * rng.uniform(0.8, 1.1), 3),
+                "recommended_action": actions.get(a_type, "escalate_to_stage_b"),
+                "features": {
+                    "speed_kmh": round(rng.uniform(0, 15 if a_type == "stuck" else 45), 1),
+                    "acceleration_delta": round(rng.uniform(-20, 20), 2),
+                    "dwell_time_sec": round(rng.uniform(0, 600 if a_type == "stuck" else 30), 1),
+                    "distance_from_route_km": round(rng.uniform(0, 8 if a_type == "drift" else 1), 2),
+                    "heading_change_deg": round(rng.uniform(0, 180 if a_type == "congestion" else 30), 1),
+                },
+                "lat": round(corridor.center_lat + offset_lat, 6),
+                "lng": round(corridor.center_lng + offset_lng, 6),
+                "volunteerId": f"vol_{rng.randint(1000, 9999)}",
+                "shipmentId": f"shp_{rng.randint(10000, 99999)}",
+                "detectedAt": now - timedelta(minutes=minutes_ago),
+            })
+            anomalies_created += 1
+
+        # Tracking events — normal + some anomalous speeds.
+        for j in range(n_tracking):
+            offset_lat = rng.uniform(-0.05, 0.05) * (corridor.radius_km / 10)
+            offset_lng = rng.uniform(-0.05, 0.05) * (corridor.radius_km / 10)
+            minutes_ago = rng.randint(5, 120)
+            speed = rng.choices(
+                [rng.uniform(0, 3), rng.uniform(5, 15), rng.uniform(25, 55)],
+                weights=[2, 3, 5],
+                k=1,
+            )[0]
+
+            ref = db.collection("tracking_events").document()
+            ref.set({
+                "location": {
+                    "lat": round(corridor.center_lat + offset_lat, 6),
+                    "lng": round(corridor.center_lng + offset_lng, 6),
+                },
+                "speedKmh": round(speed, 1),
+                "heading": round(rng.uniform(0, 360), 1),
+                "accuracy": round(rng.uniform(3, 25), 1),
+                "volunteerId": f"vol_{rng.randint(1000, 9999)}",
+                "ts": now - timedelta(minutes=minutes_ago),
+            })
+            tracking_created += 1
+
+        corridors_populated.append(corridor.id)
+
+    log.info(
+        "ml.seed_demo_complete",
+        anomalies=anomalies_created,
+        tracking=tracking_created,
+    )
+
+    return SeedPayload(data=SeedResult(
+        anomalies_created=anomalies_created,
+        tracking_events_created=tracking_created,
+        corridors_populated=corridors_populated,
+    ))

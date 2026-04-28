@@ -108,6 +108,8 @@ export default function DisruptionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [predicting, setPredicting] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -142,6 +144,27 @@ export default function DisruptionsPage() {
       setError(err instanceof ApiCallError ? err.message : "Prediction failed");
     } finally {
       setPredicting(false);
+    }
+  };
+
+  const seedDemoData = async () => {
+    setSeeding(true);
+    setSeedResult(null);
+    try {
+      const result = await api.post<{
+        anomalies_created: number;
+        tracking_events_created: number;
+        corridors_populated: string[];
+      }>("/api/ml/seed-demo");
+      setSeedResult(
+        `Seeded ${result.anomalies_created} anomalies + ${result.tracking_events_created} tracking events`
+      );
+      // Reload data after seeding.
+      await loadData();
+    } catch (err) {
+      setError(err instanceof ApiCallError ? err.message : "Seeding failed");
+    } finally {
+      setSeeding(false);
     }
   };
 
@@ -203,6 +226,18 @@ export default function DisruptionsPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={seedDemoData}
+              disabled={seeding}
+              className="flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+            >
+              {seeding ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Activity className="h-4 w-4" />
+              )}
+              {seeding ? "Seeding…" : "Seed Demo Data"}
+            </button>
+            <button
               onClick={runPrediction}
               disabled={predicting}
               className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
@@ -216,6 +251,12 @@ export default function DisruptionsPage() {
             </button>
           </div>
         </div>
+
+        {seedResult && (
+          <div className="rounded-md border border-emerald-500/50 bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400">
+            {seedResult}
+          </div>
+        )}
 
         {error && (
           <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
