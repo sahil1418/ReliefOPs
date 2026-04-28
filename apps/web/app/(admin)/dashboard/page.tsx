@@ -7,6 +7,7 @@ import { AdminTopbar } from "@/components/admin/AdminTopbar";
 import { AIActivityFeed } from "@/components/ai/AIActivityFeed";
 import { AIInsightsCard } from "@/components/ai/AIInsightsCard";
 import { OpsMapDynamic } from "@/components/map/OpsMapDynamic";
+import { DisruptionRadar } from "@/components/ml/DisruptionRadar";
 import {
   Card,
   CardContent,
@@ -93,6 +94,10 @@ export default function DashboardPage() {
             <AIInsightsCard />
           </div>
           <AIActivityFeed />
+        </div>
+
+        <div className="mt-6">
+          <DisruptionRadar />
         </div>
 
         <Card className="mt-6">

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.core.firebase import get_firestore
 from src.core.logging import get_logger
@@ -47,6 +47,8 @@ class CorridorRisk(BaseModel):
 
 
 class DisruptionPrediction(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     timestamp: str
     corridors: list[CorridorRisk]
     model_version: str = "v1.0-gemini-hybrid"
