@@ -216,10 +216,12 @@ export default function DisruptionsPage() {
       risk: Math.round(c.risk_score * 100),
     })) ?? [];
 
-  const highestRisk = prediction?.corridors.reduce(
-    (max, c) => (c.risk_score > max.risk_score ? c : max),
-    prediction.corridors[0]
-  );
+  const highestRisk =
+    prediction && prediction.corridors.length > 0
+      ? prediction.corridors.reduce((max, c) =>
+          c.risk_score > max.risk_score ? c : max
+        )
+      : null;
 
   /* ── Render ──────────────────────────────────────────────────────────── */
 
