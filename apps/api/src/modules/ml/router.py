@@ -22,7 +22,7 @@ from src.core.auth import CurrentUser
 from src.core.errors import ApiError, ApiResponse
 from src.core.firebase import get_firestore
 from src.core.logging import get_logger
-from src.modules.ml import anomaly_detector, disruption_predictor, graph_router
+from src.modules.ml import anomaly_detector, disruption_predictor, graph_router, hmm_classifier
 
 log = get_logger("relief.ml.router")
 
@@ -92,6 +92,14 @@ async def list_anomalies(
     return AnomalyListPayload(data=out)
 
 
+class PingFeatures(BaseModel):
+    lat: float
+    lng: float
+    speedKmh: float = 0.0
+    heading: float = 0.0
+    ts: str | None = None
+
+
 class DetectRequest(BaseModel):
     lat: float
     lng: float
@@ -104,6 +112,7 @@ class DetectRequest(BaseModel):
     previous_speedKmh: float | None = None
     previous_heading: float | None = None
     previous_ts: str | None = None
+    history: list[PingFeatures] | None = None  # oldest -> newest, NOT incl. current
 
 
 class DetectPayload(ApiResponse[dict[str, Any]]):
@@ -115,7 +124,11 @@ async def detect_anomaly(
     body: DetectRequest,
     _user: CurrentUser,
 ) -> DetectPayload:
-    """One-shot anomaly detection on a single GPS ping."""
+    """Anomaly detection on a single GPS ping.
+
+    If `history` is provided, the HMM Stage B classifier runs over the
+    sequence and the response includes Viterbi state path + posterior.
+    """
     current = {
         "lat": body.lat,
         "lng": body.lng,
@@ -132,15 +145,77 @@ async def detect_anomaly(
             "heading": body.previous_heading or 0,
             "ts": body.previous_ts,
         }
+    history = None
+    if body.history:
+        history = [
+            {"lat": h.lat, "lng": h.lng, "speedKmh": h.speedKmh,
+             "heading": h.heading, "ts": h.ts}
+            for h in body.history
+        ]
 
-    result = anomaly_detector.detect(current, previous)
-    return DetectPayload(data={
+    result = anomaly_detector.detect(current, previous, history_pings=history)
+    payload: dict[str, Any] = {
         "score": result.score,
         "is_anomaly": result.is_anomaly,
         "anomaly_type": result.anomaly_type.value,
         "confidence": result.confidence,
         "recommended_action": result.recommended_action,
         "features": result.features_used,
+        "stage": result.stage,
+    }
+    if result.hmm_state is not None:
+        payload["hmm"] = {
+            "state": result.hmm_state,
+            "confidence": result.hmm_confidence,
+            "path": result.hmm_path,
+            "posterior": result.hmm_posterior,
+        }
+    return DetectPayload(data=payload)
+
+
+# ── HMM direct decode endpoint ─────────────────────────────────────────────
+
+
+class HmmDecodeRequest(BaseModel):
+    sequence: list[PingFeatures]  # ordered oldest -> newest
+
+
+class HmmDecodePayload(ApiResponse[dict[str, Any]]):
+    pass
+
+
+@router.post("/hmm-decode", response_model=HmmDecodePayload)
+async def hmm_decode(
+    body: HmmDecodeRequest,
+    _user: CurrentUser,
+) -> HmmDecodePayload:
+    """Run Viterbi + Forward-Backward over a sequence of GPS pings.
+
+    Returns the most-likely behavioural state sequence and the posterior
+    probability over the latest state.  Useful for debugging the HMM and
+    for showing the trajectory of degradation in the UI.
+    """
+    if not body.sequence:
+        raise ApiError(code="EMPTY_SEQUENCE", message="sequence must contain at least one ping",
+                       status_code=400)
+    feature_seq: list[dict[str, float]] = []
+    prev: dict[str, Any] | None = None
+    for p in body.sequence:
+        cur = {"lat": p.lat, "lng": p.lng, "speedKmh": p.speedKmh,
+               "heading": p.heading, "ts": p.ts}
+        feature_seq.append(anomaly_detector.extract_features(cur, prev))
+        prev = cur
+
+    result = hmm_classifier.classify_sequence(feature_seq)
+    return HmmDecodePayload(data={
+        "state": result.state,
+        "state_index": result.state_index,
+        "confidence": result.confidence,
+        "posterior": result.posterior,
+        "path": result.path,
+        "observations": result.observations,
+        "log_likelihood": result.log_likelihood,
+        "n_steps": result.n_steps,
     })
 
 
@@ -180,6 +255,7 @@ async def model_status(_user: CurrentUser) -> ModelStatusPayload:
 
     return ModelStatusPayload(data={
         "anomaly_detector": anomaly_info,
+        "hmm_classifier": hmm_classifier.get_model_info(),
         "graph_router": {
             "algorithm": "Dijkstra + A*",
             "graph_stats": graph.stats,

@@ -52,6 +52,12 @@ class AnomalyResult:
     confidence: float           # 0–1
     recommended_action: str
     features_used: dict[str, float] = field(default_factory=dict)
+    # Stage B (HMM sequence refinement) — populated when a sequence is provided.
+    hmm_state: str | None = None
+    hmm_confidence: float | None = None
+    hmm_path: list[str] | None = None
+    hmm_posterior: dict[str, float] | None = None
+    stage: str = "A"  # "A" = IsolationForest only · "B" = also refined by HMM
 
 
 # ── Feature extraction ──────────────────────────────────────────────────────
@@ -266,10 +272,77 @@ def detect(
     current_ping: dict[str, Any],
     previous_ping: dict[str, Any] | None = None,
     route_stops: list[dict[str, Any]] | None = None,
+    history_pings: list[dict[str, Any]] | None = None,
 ) -> AnomalyResult:
-    """Convenience entry point — extract features + predict."""
+    """Convenience entry point — extract features + predict.
+
+    If `history_pings` is provided (oldest first, *not* including current_ping)
+    AND the IsolationForest flags the current ping as anomalous, the HMM
+    Stage B classifier runs over the full sequence (history + current) and
+    overrides the heuristic anomaly_type with the sequence-aware state.
+    """
     features = extract_features(current_ping, previous_ping, route_stops)
-    return TransitAnomalyDetector.get().predict(features)
+    result = TransitAnomalyDetector.get().predict(features)
+
+    # Stage B: always invoked when history is available.  IsolationForest
+    # scores points in isolation and misses degradation-over-time signals
+    # (e.g. a vehicle slowing down for 5 minutes ending at 0 km/h looks like
+    # one normal ping per step but is clearly an anomaly as a sequence).  HMM
+    # closes that gap.  Sub-millisecond — cheap to always run.
+    if history_pings:
+        try:
+            from src.modules.ml.hmm_classifier import (
+                HMM_STATE_TO_ANOMALY,
+                classify_sequence,
+            )
+
+            # Build feature sequence from history + current.  Each step uses
+            # its predecessor for delta features so transitions are correct.
+            feature_seq: list[dict[str, float]] = []
+            prev_for_step: dict[str, Any] | None = None
+            for p in history_pings:
+                feature_seq.append(extract_features(p, prev_for_step, route_stops))
+                prev_for_step = p
+            feature_seq.append(features)
+
+            hmm = classify_sequence(feature_seq)
+            result.hmm_state = hmm.state
+            result.hmm_confidence = hmm.confidence
+            result.hmm_path = hmm.path
+            result.hmm_posterior = hmm.posterior
+            result.stage = "B"
+
+            # HMM-derived non-cruising state with reasonable confidence is an
+            # anomaly even if Stage A didn't flag it.  This is the whole point
+            # of Stage B — sequence-aware lift over the point classifier.
+            mapping = HMM_STATE_TO_ANOMALY.get(hmm.state)
+            if mapping and hmm.confidence >= 0.5:
+                anomaly_str, action = mapping
+                if anomaly_str == "none":
+                    # HMM strongly believes this is normal cruising —
+                    # only override Stage A if HMM is very confident.
+                    if hmm.confidence >= 0.85 and not result.is_anomaly:
+                        result.anomaly_type = AnomalyType.NONE
+                        result.recommended_action = action
+                else:
+                    # HMM detected a behavioural anomaly.  Upgrade.
+                    try:
+                        result.anomaly_type = AnomalyType(anomaly_str)
+                    except ValueError:
+                        pass
+                    result.recommended_action = action
+                    # Lift is_anomaly + confidence from the HMM posterior so
+                    # downstream consumers (alerts, reroute trigger) react.
+                    result.is_anomaly = True
+                    # Blend confidences: max of Stage A and HMM posterior.
+                    blended = max(result.confidence, float(hmm.confidence))
+                    result.confidence = round(blended, 3)
+                    # Bump the score so threshold-based downstream logic also fires.
+                    result.score = round(max(result.score, float(hmm.confidence)), 4)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ml.hmm.stage_b_failed", error=str(exc)[:200])
+
+    return result
 
 
 def get_model_info() -> dict[str, Any]:

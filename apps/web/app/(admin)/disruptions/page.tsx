@@ -48,6 +48,7 @@ type DisruptionPrediction = {
 
 type ModelStatus = {
   anomaly_detector: { version: string; fitted: boolean; trained_at: string | null; n_training_samples: number; algorithm: string; n_estimators: number; features: string[] };
+  hmm_classifier?: { algorithm: string; version: string; n_states: number; n_observations: number; states: string[]; stickiness: number[]; stage: string; complexity: string };
   graph_router: { algorithm: string; graph_stats: { nodes: number; edges: number; blocked_edges: number; disrupted_edges: number }; demo_nodes: string[] };
   disruption_predictor: { model: string; corridors_monitored: number };
 };
@@ -298,8 +299,11 @@ export default function DisruptionsPage() {
           </CardHeader>
           <CardContent>
             {!model ? <p className="py-6 text-center text-sm text-muted-foreground">Loading&hellip;</p> : (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <PipeCard accent="from-violet-500/10 to-purple-500/10" dot="#7c3aed" title="Anomaly Detector" items={[["Algorithm", model.anomaly_detector.algorithm], ["Estimators", String(model.anomaly_detector.n_estimators)], ["Samples", String(model.anomaly_detector.n_training_samples)], ["Version", model.anomaly_detector.version], ["Status", model.anomaly_detector.fitted ? "Active" : "Offline"]]} />
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <PipeCard accent="from-violet-500/10 to-purple-500/10" dot="#7c3aed" title="Stage A · Anomaly Detector" items={[["Algorithm", model.anomaly_detector.algorithm], ["Estimators", String(model.anomaly_detector.n_estimators)], ["Samples", String(model.anomaly_detector.n_training_samples)], ["Version", model.anomaly_detector.version], ["Status", model.anomaly_detector.fitted ? "Active" : "Offline"]]} />
+                {model.hmm_classifier && (
+                  <PipeCard accent="from-fuchsia-500/10 to-pink-500/10" dot="#c026d3" title="Stage B · HMM Behaviour" items={[["Algorithm", "Viterbi + Forward-Backward"], ["Hidden states", `${model.hmm_classifier.n_states} (${model.hmm_classifier.states.join(", ")})`], ["Observations", String(model.hmm_classifier.n_observations)], ["Stickiness", model.hmm_classifier.stickiness.map(s => s.toFixed(2)).join(" · ")], ["Version", model.hmm_classifier.version]]} />
+                )}
                 <PipeCard accent="from-sky-500/10 to-cyan-500/10" dot="#0284c7" title="Graph Router (Dijkstra + A*)" items={[["Algorithm", model.graph_router.algorithm], ["Nodes", String(model.graph_router.graph_stats.nodes)], ["Edges", String(model.graph_router.graph_stats.edges)], ["Blocked", String(model.graph_router.graph_stats.blocked_edges)], ["Disrupted", String(model.graph_router.graph_stats.disrupted_edges)]]} />
                 <PipeCard accent="from-amber-500/10 to-orange-500/10" dot="#ea580c" title="Disruption Predictor" items={[["Model", "Gemini 2.5 Flash + heuristic"], ["Corridors", String(model.disruption_predictor.corridors_monitored)], ["Threshold", "0.7 (auto-reroute)"], ["Cadence", "15 s real-time"]]} />
               </div>
